@@ -1,0 +1,325 @@
+:root {
+  --bg:       #0d1a0e;
+  --surface:  #152918;
+  --border:   #1e3d22;
+  --green:    #1a7a2e;
+  --green-hi: #24a83f;
+  --gold:     #c9a84c;
+  --gold-dim: #8a6e2f;
+  --text:     #e8f5ea;
+  --muted:    #7a9e80;
+  --qualify:  #1a5c2a;
+  --maybe:    #4a4a10;
+  --elim:     transparent;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+header {
+  background: linear-gradient(135deg, #0a1a0b 0%, #1a3d1e 100%);
+  border-bottom: 2px solid var(--gold-dim);
+  padding: 20px 24px 0;
+}
+
+.header-content h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+
+.header-content .subtitle {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 20px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover { color: var(--text); }
+
+.tab-btn.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+/* ── Main ── */
+main { padding: 24px; }
+
+.view { display: none; }
+.view.active { display: block; }
+
+/* ── Group grid ── */
+.groups-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.group-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.group-card h2 {
+  background: var(--green);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 8px 12px;
+  text-transform: uppercase;
+}
+
+/* ── Standings table ── */
+.standings {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.standings th:not(.team-col) { width: 68px; }
+
+.standings thead th {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 6px 8px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.standings thead th.team-col { text-align: left; padding-left: 10px; }
+
+.standings tbody tr {
+  border-top: 1px solid var(--border);
+  transition: background 0.1s;
+}
+
+.standings tbody tr:hover { background: rgba(255,255,255,0.04); }
+
+.standings td {
+  padding: 7px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.standings td.team-col {
+  text-align: left;
+  padding-left: 10px;
+}
+
+.team-name {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.flag { font-size: 1.1em; }
+
+/* Prediction inputs */
+.pred-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.85rem;
+  padding: 3px 0;
+  text-align: center;
+  width: 52px;
+}
+
+.pred-input:focus {
+  border-color: var(--gold-dim);
+  outline: none;
+}
+
+/* Hide number spinners */
+.pred-input::-webkit-outer-spin-button,
+.pred-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pred-input[type=number] { -moz-appearance: textfield; }
+
+/* Advancement highlighting */
+.row-qualify { border-left: 3px solid var(--green-hi); background: rgba(26,122,46,0.15); }
+.row-maybe   { border-left: 3px dashed var(--gold-dim); background: rgba(74,74,16,0.2); }
+
+/* ── Legend ── */
+.legend {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.legend-item { align-items: center; display: flex; gap: 6px; }
+
+.legend-dot {
+  border-radius: 2px;
+  height: 12px;
+  width: 4px;
+}
+
+.legend-dot.qualify { background: var(--green-hi); }
+.legend-dot.maybe   { background: var(--gold-dim); border: 1px dashed var(--gold-dim); }
+
+/* ── Bracket ── */
+.bracket-scroll { overflow-x: auto; padding-bottom: 16px; }
+
+.bracket {
+  display: flex;
+  gap: 0;
+  width: 100%;
+}
+
+.bracket-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 130px;
+}
+
+.round-label {
+  color: var(--gold);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0 8px 10px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.round-matches {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.final-col .round-matches { justify-content: center; }
+
+.match-pair {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-around;
+  position: relative;
+}
+
+/* Vertical bracket line connecting the two match-card centers */
+.bracket-col:not(.final-col) .match-pair::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 2px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+/* Horizontal connector at pair midpoint to next column */
+.bracket-col:not(.final-col) .match-pair::before {
+  content: '';
+  position: absolute;
+  right: -16px;
+  top: 50%;
+  width: 16px;
+  height: 2px;
+  background: var(--border);
+  transform: translateY(-1px);
+  pointer-events: none;
+}
+
+.match-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 4px 8px;
+  overflow: hidden;
+}
+
+.match-team {
+  align-items: center;
+  display: flex;
+  padding: 5px 8px;
+  transition: background 0.1s;
+}
+
+.match-team.clickable { cursor: pointer; }
+.match-team.clickable:hover { background: rgba(255,255,255,0.06); }
+
+.match-team + .match-team { border-top: 1px solid var(--border); }
+
+.match-team.winner {
+  background: rgba(26, 122, 46, 0.25);
+  font-weight: 700;
+}
+
+.match-team.winner .match-team-name { color: #6ee88a; }
+
+.match-team.loser { opacity: 0.38; }
+
+.match-team-name {
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-team-name.tbd { color: var(--muted); }
+
+/* Third place section */
+.third-place-section {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  padding-top: 16px;
+}
+
+.third-place-section h3 {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.third-place-section .match-card { max-width: 180px; }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  header { padding: 16px 16px 0; }
+  main { padding: 16px; }
+  .header-content h1 { font-size: 1.2rem; }
+  .tab-btn { font-size: 0.85rem; padding: 8px 14px; }
+  .groups-grid { grid-template-columns: 1fr; }
+}
