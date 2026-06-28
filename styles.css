@@ -27,7 +27,7 @@ body {
 header {
   background: linear-gradient(135deg, #0a1a0b 0%, #1a3d1e 100%);
   border-bottom: 2px solid var(--gold-dim);
-  padding: 20px 24px 0;
+  padding: 20px 24px;
 }
 
 .header-content h1 {
@@ -43,154 +43,13 @@ header {
   margin-top: 4px;
 }
 
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-top: 16px;
-}
-
-.tab-btn {
-  background: none;
-  border: none;
-  border-bottom: 3px solid transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 8px 20px;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.tab-btn:hover { color: var(--text); }
-
-.tab-btn.active {
-  color: var(--gold);
-  border-bottom-color: var(--gold);
-}
-
 /* ── Main ── */
 main { padding: 24px; }
 
 .view { display: none; }
 .view.active { display: block; }
 
-/* ── Group grid ── */
-.groups-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.group-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.group-card h2 {
-  background: var(--green);
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  padding: 8px 12px;
-  text-transform: uppercase;
-}
-
-/* ── Standings table ── */
-.standings {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.standings th:not(.team-col) { width: 68px; }
-
-.standings thead th {
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  padding: 6px 8px;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.standings thead th.team-col { text-align: left; padding-left: 10px; }
-
-.standings tbody tr {
-  border-top: 1px solid var(--border);
-  transition: background 0.1s;
-}
-
-.standings tbody tr:hover { background: rgba(255,255,255,0.04); }
-
-.standings td {
-  padding: 7px 8px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.standings td.team-col {
-  text-align: left;
-  padding-left: 10px;
-}
-
-.team-name {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
 .flag { font-size: 1.1em; }
-
-/* Prediction inputs */
-.pred-input {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 0.85rem;
-  padding: 3px 0;
-  text-align: center;
-  width: 52px;
-}
-
-.pred-input:focus {
-  border-color: var(--gold-dim);
-  outline: none;
-}
-
-/* Hide number spinners */
-.pred-input::-webkit-outer-spin-button,
-.pred-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.pred-input[type=number] { -moz-appearance: textfield; }
-
-/* Advancement highlighting */
-.row-qualify { border-left: 3px solid var(--green-hi); background: rgba(26,122,46,0.15); }
-.row-maybe   { border-left: 3px dashed var(--gold-dim); background: rgba(74,74,16,0.2); }
-
-/* ── Legend ── */
-.legend {
-  color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
-  font-size: 0.75rem;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.legend-item { align-items: center; display: flex; gap: 6px; }
-
-.legend-dot {
-  border-radius: 2px;
-  height: 12px;
-  width: 4px;
-}
-
-.legend-dot.qualify { background: var(--green-hi); }
-.legend-dot.maybe   { background: var(--gold-dim); border: 1px dashed var(--gold-dim); }
 
 /* ── Bracket ── */
 .bracket-scroll { overflow-x: auto; padding-bottom: 16px; }
@@ -315,11 +174,48 @@ main { padding: 24px; }
 
 .third-place-section .match-card { max-width: 180px; }
 
+/* ── Capture / export ── */
+#capture-root {
+  background: var(--bg);
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.capture-title {
+  color: var(--gold);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+/* ── Share bar ── */
+.share-bar {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.share-btn {
+  background: var(--green);
+  border: 1px solid var(--green-hi);
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 10px 22px;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.share-btn:hover { background: var(--green-hi); }
+.share-btn:disabled { cursor: default; opacity: 0.6; }
+
 /* ── Responsive ── */
 @media (max-width: 600px) {
-  header { padding: 16px 16px 0; }
+  header { padding: 16px; }
   main { padding: 16px; }
   .header-content h1 { font-size: 1.2rem; }
-  .tab-btn { font-size: 0.85rem; padding: 8px 14px; }
-  .groups-grid { grid-template-columns: 1fr; }
 }
