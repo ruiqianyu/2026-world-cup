@@ -1,13 +1,6 @@
 (function () {
   // ── State ──────────────────────────────────────────────────────────────────
 
-  // groupPreds[groupName][teamName] = { gd: 0, pts: 0 }
-  const groupPreds = {};
-  for (const g of GROUPS) {
-    groupPreds[g.name] = {};
-    for (const t of g.teams) groupPreds[g.name][t.name] = { gd: 0, pts: 0 };
-  }
-
   // picks[round][idx] = teamName | null
   const picks = {
     r32:   new Array(16).fill(null),
@@ -18,50 +11,13 @@
     third: new Array(1).fill(null),
   };
 
-  // Cached qualifiers snapshot, refreshed before any bracket render
-  let _q = computeQualifiers();
-
-  // ── Derived: qualifiers ────────────────────────────────────────────────────
-
-  function sortedGroup(gName) {
-    const preds = groupPreds[gName];
-    return [...GROUPS.find(g => g.name === gName).teams].sort((a, b) => {
-      const pa = preds[a.name], pb = preds[b.name];
-      return pb.pts !== pa.pts ? pb.pts - pa.pts : pb.gd - pa.gd;
-    });
-  }
-
-  function computeQualifiers() {
-    const firsts = {}, seconds = {};
-    const thirds = [];
-    for (const g of GROUPS) {
-      const [t1, t2, t3] = sortedGroup(g.name);
-      firsts[g.name] = t1;
-      seconds[g.name] = t2;
-      const p = groupPreds[g.name][t3.name];
-      thirds.push({ team: t3, pts: p.pts, gd: p.gd });
-    }
-    thirds.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : b.gd - a.gd);
-    return { firsts, seconds, bestThirds: thirds.slice(0, 8).map(x => x.team) };
-  }
-
   // ── Derived: bracket participants ──────────────────────────────────────────
-
-  function resolveLabel(label, best3rdSlot) {
-    if (label.startsWith("1st ")) return _q.firsts[label.slice(4)] ?? null;
-    if (label.startsWith("2nd ")) return _q.seconds[label.slice(4)] ?? null;
-    if (label === "Best 3rd")     return _q.bestThirds[best3rdSlot] ?? null;
-    return null;
-  }
 
   // Returns { home, away } team objects (or null) for any bracket match
   function matchTeams(round, idx) {
     if (round === "r32") {
       const m = KNOCKOUT.r32[idx];
-      return {
-        home: resolveLabel(m.home, -1),
-        away: resolveLabel(m.away, m.best3rdSlot),
-      };
+      return { home: m.home, away: m.away };
     }
     if (round === "r16") {
       return { home: winnerOf("r32", idx * 2), away: winnerOf("r32", idx * 2 + 1) };
@@ -91,141 +47,6 @@
     return null;
   }
 
-  // ── Tab switching ──────────────────────────────────────────────────────────
-
-  document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b === btn));
-      document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === btn.dataset.tab + "-view"));
-    });
-  });
-
-  // ── Group stage rendering ──────────────────────────────────────────────────
-
-  function renderGroups() {
-    const view = document.getElementById("groups-view");
-    view.innerHTML = "";
-
-    const legend = document.createElement("div");
-    legend.className = "legend";
-    legend.innerHTML = `
-      <span class="legend-item"><span class="legend-dot qualify"></span>Advances (1st / 2nd)</span>
-      <span class="legend-item"><span class="legend-dot maybe"></span>Potential qualifier (Best 3rd)</span>
-    `;
-    view.appendChild(legend);
-
-    const grid = document.createElement("div");
-    grid.className = "groups-grid";
-    for (const g of GROUPS) grid.appendChild(buildGroupCard(g));
-    view.appendChild(grid);
-  }
-
-  function buildGroupCard(group) {
-    const sorted = sortedGroup(group.name);
-    const bestThirdSet = new Set(_q.bestThirds.map(t => t.name));
-
-    const card = document.createElement("div");
-    card.className = "group-card";
-    card.dataset.group = group.name;
-
-    const h2 = document.createElement("h2");
-    h2.textContent = `Group ${group.name}`;
-    card.appendChild(h2);
-
-    const table = document.createElement("table");
-    table.className = "standings";
-    table.innerHTML = `<thead><tr>
-      <th class="team-col">Team</th>
-      <th title="Goal Difference">GD</th>
-      <th title="Points">Pts</th>
-    </tr></thead>`;
-
-    const tbody = document.createElement("tbody");
-    sorted.forEach((team, i) => {
-      const isBestThird = i === 2 && bestThirdSet.has(team.name);
-      const tr = document.createElement("tr");
-      tr.dataset.team = team.name;
-      tr.className = i < 2 ? "row-qualify" : (isBestThird ? "row-maybe" : "");
-
-      const tdTeam = document.createElement("td");
-      tdTeam.className = "team-col";
-      tdTeam.innerHTML = `<span class="team-name"><span class="flag">${team.flag}</span>${esc(team.name)}</span>`;
-
-      const tdGd = document.createElement("td");
-      tdGd.appendChild(makeInput("gd", group.name, team.name));
-
-      const tdPts = document.createElement("td");
-      tdPts.appendChild(makeInput("pts", group.name, team.name));
-
-      tr.append(tdTeam, tdGd, tdPts);
-      tbody.appendChild(tr);
-    });
-
-    table.appendChild(tbody);
-    card.appendChild(table);
-    return card;
-  }
-
-  function makeInput(field, groupName, teamName) {
-    const input = document.createElement("input");
-    input.type = "number";
-    input.className = "pred-input";
-    input.dataset.field = field;
-    input.dataset.team = teamName;
-    input.dataset.group = groupName;
-    input.value = groupPreds[groupName][teamName][field];
-    if (field === "pts") input.min = "0";
-
-    input.addEventListener("input", () => {
-      let v = parseInt(input.value, 10);
-      if (isNaN(v)) v = 0;
-      if (field === "pts") v = Math.max(0, v);
-      groupPreds[groupName][teamName][field] = v;
-      onGroupChange();
-    });
-
-    return input;
-  }
-
-  function onGroupChange() {
-    _q = computeQualifiers();
-
-    // Reset all bracket picks since group participants changed
-    for (const key of Object.keys(picks)) picks[key].fill(null);
-
-    // Update group highlights + row order in place (preserves input focus)
-    reorderAndRehighlight();
-
-    // Rebuild bracket
-    renderBracket();
-    saveState();
-  }
-
-  function reorderAndRehighlight() {
-    const bestThirdSet = new Set(_q.bestThirds.map(t => t.name));
-
-    for (const g of GROUPS) {
-      const sorted = sortedGroup(g.name);
-      const card = document.querySelector(`.group-card[data-group="${g.name}"]`);
-      if (!card) continue;
-      const tbody = card.querySelector("tbody");
-
-      // Move rows to end of tbody in sorted order (preserves DOM nodes + input state)
-      for (const team of sorted) {
-        const row = tbody.querySelector(`tr[data-team="${CSS.escape(team.name)}"]`);
-        if (row) tbody.appendChild(row);
-      }
-
-      // Update highlight classes
-      sorted.forEach((team, i) => {
-        const row = tbody.querySelector(`tr[data-team="${CSS.escape(team.name)}"]`);
-        if (!row) return;
-        const isBestThird = i === 2 && bestThirdSet.has(team.name);
-        row.className = i < 2 ? "row-qualify" : (isBestThird ? "row-maybe" : "");
-      });
-    }
-  }
-
   // ── Bracket rendering ──────────────────────────────────────────────────────
 
   const ROUND_DEFS = [
@@ -239,6 +60,15 @@
   function renderBracket() {
     const view = document.getElementById("bracket-view");
     view.innerHTML = "";
+
+    // Everything inside captureRoot is what gets exported as an image.
+    const captureRoot = document.createElement("div");
+    captureRoot.id = "capture-root";
+
+    const captureTitle = document.createElement("div");
+    captureTitle.className = "capture-title";
+    captureTitle.textContent = "2026 FIFA World Cup · Knockout Bracket";
+    captureRoot.appendChild(captureTitle);
 
     const scroll = document.createElement("div");
     scroll.className = "bracket-scroll";
@@ -275,14 +105,194 @@
     }
 
     scroll.appendChild(bracket);
-    view.appendChild(scroll);
+    captureRoot.appendChild(scroll);
 
     const thirdSec = document.createElement("div");
     thirdSec.className = "third-place-section";
     thirdSec.innerHTML = "<h3>Third Place</h3>";
     thirdSec.appendChild(buildMatchCard("third", 0));
-    view.appendChild(thirdSec);
+    captureRoot.appendChild(thirdSec);
+
+    view.appendChild(captureRoot);
+    view.appendChild(buildShareBar());
   }
+
+  // ── Share / export ─────────────────────────────────────────────────────────
+
+  function buildShareBar() {
+    const bar = document.createElement("div");
+    bar.className = "share-bar";
+
+    const btn = document.createElement("button");
+    btn.className = "share-btn";
+    btn.type = "button";
+    btn.textContent = "📷  Download bracket as image";
+    btn.addEventListener("click", () => downloadBracketImage(btn));
+
+    bar.appendChild(btn);
+    return bar;
+  }
+
+  // Dependency-free PNG export: render the bracket into an <svg><foreignObject>,
+  // rasterize it via an <img>, then draw to a canvas and download. No libraries.
+  function downloadBracketImage(btn) {
+    const root = document.getElementById("capture-root");
+    if (!root) return;
+
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Rendering…";
+
+    const fail = (msg) => {
+      btn.disabled = false;
+      btn.textContent = original;
+      alert(msg);
+    };
+
+    // Fixed export geometry → every user downloads an identically sized image,
+    // independent of viewport (which otherwise drives each flex cell's width).
+    const PAD = 16;   // matches #capture-root padding
+    const COLS = 5;   // R32 → Final columns
+    const CELL = 190; // fixed width per bracket column
+    const width = COLS * CELL + PAD * 2;
+
+    const clone = root.cloneNode(true);
+    // Bake computed styles onto every node so layout survives inside the SVG,
+    // regardless of whether the stylesheet is readable (e.g. file:// pages).
+    inlineComputedStyles(root, clone);
+    applyExportLayout(clone, width, CELL);
+    clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+
+    // Measure the laid-out height off-screen so the canvas is sized exactly.
+    clone.style.position = "absolute";
+    clone.style.left = "-99999px";
+    clone.style.top = "0";
+    document.body.appendChild(clone);
+    const height = clone.scrollHeight;
+    document.body.removeChild(clone);
+    clone.style.position = "static";
+    clone.style.left = "";
+    clone.style.top = "";
+
+    // Connector lines are CSS pseudo-elements (can't be inlined), so inject them.
+    const styleEl = document.createElement("style");
+    styleEl.textContent = CONNECTOR_CSS;
+    clone.insertBefore(styleEl, clone.firstChild);
+
+    const xhtml = new XMLSerializer().serializeToString(clone);
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        `<foreignObject x="0" y="0" width="100%" height="100%">${xhtml}</foreignObject>` +
+      `</svg>`;
+
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+    const img = new Image();
+
+    img.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width  = width * scale;
+      canvas.height = height * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(scale, scale);
+      ctx.fillStyle = getComputedStyle(document.body).backgroundColor || "#0d1a0e";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+
+      canvas.toBlob((blob) => {
+        if (!blob) return fail("Sorry, something went wrong creating the image.");
+        const link = document.createElement("a");
+        link.download = "world-cup-2026-bracket.png";
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        btn.disabled = false;
+        btn.textContent = original;
+      }, "image/png");
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      fail("Sorry, something went wrong creating the image.");
+    };
+
+    img.src = url;
+  }
+
+  // Copy resolved computed styles from each source node onto its clone, so the
+  // detached clone renders identically without needing the external stylesheet.
+  function inlineComputedStyles(src, dst) {
+    copyComputedStyle(src, dst);
+    const srcNodes = src.querySelectorAll("*");
+    const dstNodes = dst.querySelectorAll("*");
+    for (let i = 0; i < srcNodes.length; i++) copyComputedStyle(srcNodes[i], dstNodes[i]);
+  }
+
+  // Sizing props are intentionally skipped: baking frozen px sizes (measured on
+  // the live, possibly-narrow/high-DPI viewport) makes boxes mismatch the fixed
+  // export columns and leaves rounding gaps. Layout still reproduces because all
+  // the display/flex/padding properties are copied — boxes just size naturally.
+  const SKIP_PROPS = new Set([
+    "width", "height", "min-width", "min-height", "max-width", "max-height",
+    "inline-size", "block-size", "min-inline-size", "min-block-size",
+    "max-inline-size", "max-block-size",
+  ]);
+
+  function copyComputedStyle(src, dst) {
+    const cs = getComputedStyle(src);
+    let text = "";
+    for (let i = 0; i < cs.length; i++) {
+      const p = cs[i];
+      if (SKIP_PROPS.has(p)) continue;
+      text += p + ":" + cs.getPropertyValue(p) + ";";
+    }
+    dst.style.cssText = text;
+  }
+
+  // Pin the export to a fixed grid: each column a fixed width, inner boxes fluid
+  // within it. Overrides the per-node widths inlined above so the result is the
+  // same on any screen. Heights stay as inlined (text never wraps → unaffected).
+  function applyExportLayout(clone, width, cell) {
+    clone.style.width = width + "px";
+
+    const fill = (sel) => clone.querySelectorAll(sel).forEach(e => {
+      e.style.width = "auto"; e.style.minWidth = "0"; e.style.maxWidth = "none";
+    });
+
+    clone.querySelectorAll(".bracket-scroll").forEach(e => {
+      e.style.overflow = "visible"; e.style.width = "auto";
+    });
+    fill(".bracket");
+    fill(".round-matches");
+    fill(".match-pair");
+    fill(".round-label");
+    clone.querySelectorAll(".bracket-col").forEach(e => {
+      e.style.flex = "0 0 " + cell + "px";
+      e.style.width = cell + "px";
+      e.style.minWidth = cell + "px";
+      e.style.maxWidth = cell + "px";
+    });
+    clone.querySelectorAll(".bracket .match-card").forEach(e => {
+      e.style.width = "auto"; e.style.maxWidth = "none";
+    });
+    // Third-place card isn't inside a column, so size it to match a bracket cell
+    // (column width minus the card's 8px left/right margins).
+    clone.querySelectorAll(".third-place-section .match-card").forEach(e => {
+      e.style.width = (cell - 16) + "px"; e.style.maxWidth = (cell - 16) + "px";
+    });
+    clone.querySelectorAll(".capture-title").forEach(e => {
+      e.style.height = "auto"; e.style.whiteSpace = "nowrap";
+    });
+  }
+
+  // Bracket connector lines, as pseudo-elements (colour = --border literal).
+  const CONNECTOR_CSS =
+    ".bracket-col:not(.final-col) .match-pair{position:relative;}" +
+    ".bracket-col:not(.final-col) .match-pair::after{content:'';position:absolute;" +
+      "right:0;top:25%;bottom:25%;width:2px;background:#1e3d22;}" +
+    ".bracket-col:not(.final-col) .match-pair::before{content:'';position:absolute;" +
+      "right:-16px;top:50%;width:16px;height:2px;background:#1e3d22;transform:translateY(-1px);}";
 
   function buildMatchCard(round, idx) {
     const { home, away } = matchTeams(round, idx);
@@ -323,7 +333,6 @@
   function onPick(round, idx, teamName) {
     picks[round][idx] = picks[round][idx] === teamName ? null : teamName;
     clearDownstream(round, idx);
-    _q = computeQualifiers();
     renderBracket();
     saveState();
   }
@@ -353,19 +362,14 @@
   const STORAGE_KEY = "wc2026_preds";
 
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ groupPreds, picks }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ picks }));
   }
 
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const { groupPreds: gp, picks: pk } = JSON.parse(raw);
-      for (const g of GROUPS) {
-        for (const t of g.teams) {
-          if (gp?.[g.name]?.[t.name]) groupPreds[g.name][t.name] = gp[g.name][t.name];
-        }
-      }
+      const { picks: pk } = JSON.parse(raw);
       for (const key of Object.keys(picks)) {
         if (Array.isArray(pk?.[key])) pk[key].forEach((v, i) => { picks[key][i] = v; });
       }
@@ -383,7 +387,5 @@
   // ── Init ──────────────────────────────────────────────────────────────────
 
   loadState();
-  _q = computeQualifiers();
-  renderGroups();
   renderBracket();
 })();
