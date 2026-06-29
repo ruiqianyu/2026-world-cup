@@ -207,18 +207,30 @@
     inlineComputedStyles(root, clone);
     applyExportLayout(clone, width, CELL);
 
-    // Substitute flag srcs AFTER style baking so this assignment wins over any
-    // property that inlineComputedStyles might have written. Every flag must end
-    // up with a same-origin data URL — any external URL inside the SVG foreignObject
-    // taints the canvas and makes toBlob() throw a SecurityError.
+    // Chrome taints the canvas for ANY <img> element inside SVG <foreignObject>,
+    // regardless of the src value. Replace every flag <img> with a <span> whose
+    // flag is rendered via CSS background-image (data URL). CSS backgrounds don't
+    // trigger Chrome's cross-origin check the way <img> elements do.
     const blankPng = (() => {
       const cv = document.createElement("canvas");
       cv.width = 20; cv.height = 15;
       return cv.toDataURL("image/png");
     })();
     clone.querySelectorAll("img.flag[data-flag-code]").forEach(img => {
-      img.src = flagDataCache.get(img.dataset.flagCode) || blankPng;
-      img.style.content = ""; // clear any baked content value that held the CDN URL
+      const dataUrl = flagDataCache.get(img.dataset.flagCode) || blankPng;
+      const span = document.createElement("span");
+      span.style.cssText = img.style.cssText;
+      span.style.display = "inline-block";
+      span.style.width = "20px";
+      span.style.minWidth = "20px";
+      span.style.height = "15px";
+      span.style.verticalAlign = "middle";
+      span.style.borderRadius = "1px";
+      span.style.backgroundImage = `url("${dataUrl}")`;
+      span.style.backgroundSize = "cover";
+      span.style.backgroundRepeat = "no-repeat";
+      span.style.content = "";
+      img.parentNode.replaceChild(span, img);
     });
     clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
 
