@@ -49,7 +49,7 @@ main { padding: 24px; }
 .view { display: none; }
 .view.active { display: block; }
 
-.flag { font-size: 1.1em; }
+.flag { display: inline-block; width: 20px; height: 15px; vertical-align: middle; border-radius: 1px; }
 
 /* ── Bracket ── */
 .bracket-scroll { overflow-x: auto; padding-bottom: 16px; }

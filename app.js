@@ -1,4 +1,43 @@
 (function () {
+  // ── Flag image cache ──────────────────────────────────────────────────────
+
+  // Stores ISO code → base64 data URL once preloaded.
+  // Using data URLs in the SVG foreignObject export avoids cross-origin restrictions.
+  const flagDataCache = new Map();
+
+  function flagSrc(code) {
+    return `https://flagcdn.com/20x15/${code}.png`;
+  }
+
+  // Fetch the flag via the Fetch API and convert to a data URL via FileReader.
+  // This avoids the crossOrigin/canvas-taint approach that can cause Chrome to
+  // stall with neither onload nor onerror firing when the image is already cached
+  // without CORS headers.
+  async function loadFlagDataUrl(code) {
+    try {
+      const res = await fetch(flagSrc(code));
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      flagDataCache.set(code, dataUrl);
+    } catch (_) {
+      // Network or CORS error — flag will stay as a CDN URL in the export
+    }
+  }
+
+  let flagsReadyPromise = null;
+  function preloadAllFlags() {
+    if (flagsReadyPromise) return flagsReadyPromise;
+    const codes = new Set(KNOCKOUT.r32.flatMap(m => [m.home.flag, m.away.flag]));
+    flagsReadyPromise = Promise.all([...codes].map(loadFlagDataUrl));
+    return flagsReadyPromise;
+  }
+
   // ── State ──────────────────────────────────────────────────────────────────
 
   // picks[round][idx] = teamName | null
@@ -135,7 +174,7 @@
 
   // Dependency-free PNG export: render the bracket into an <svg><foreignObject>,
   // rasterize it via an <img>, then draw to a canvas and download. No libraries.
-  function downloadBracketImage(btn) {
+  async function downloadBracketImage(btn) {
     const root = document.getElementById("capture-root");
     if (!root) return;
 
@@ -149,6 +188,11 @@
       alert(msg);
     };
 
+    // Ensure flag images are preloaded as data URLs so they survive the
+    // SVG foreignObject renderer (which does not fetch external resources).
+    // The 5 s cap prevents the export from hanging if any fetch stalls.
+    await Promise.race([preloadAllFlags(), new Promise(r => setTimeout(r, 5000))]);
+
     // Fixed export geometry → every user downloads an identically sized image,
     // independent of viewport (which otherwise drives each flex cell's width).
     const PAD = 16;   // matches #capture-root padding
@@ -157,6 +201,19 @@
     const width = COLS * CELL + PAD * 2;
 
     const clone = root.cloneNode(true);
+
+    // Every flag img must have a data URL src — any external URL left in the SVG
+    // foreignObject will taint the canvas and make toBlob() throw a SecurityError.
+    // Fall back to a blank transparent PNG so the layout is preserved even when
+    // fetch failed (e.g. file:// pages where fetch to https is blocked).
+    const blankPng = (() => {
+      const cv = document.createElement("canvas");
+      cv.width = 20; cv.height = 15;
+      return cv.toDataURL("image/png");
+    })();
+    clone.querySelectorAll("img.flag[data-flag-code]").forEach(img => {
+      img.src = flagDataCache.get(img.dataset.flagCode) || blankPng;
+    });
     // Bake computed styles onto every node so layout survives inside the SVG,
     // regardless of whether the stylesheet is readable (e.g. file:// pages).
     inlineComputedStyles(root, clone);
@@ -317,7 +374,19 @@
 
     const nameEl = document.createElement("span");
     nameEl.className = "match-team-name" + (tbd ? " tbd" : "");
-    nameEl.innerHTML = tbd ? "TBD" : `<span class="flag">${flag}</span> ${esc(name)}`;
+    if (tbd) {
+      nameEl.textContent = "TBD";
+    } else {
+      const flagImg = document.createElement("img");
+      flagImg.className = "flag";
+      flagImg.dataset.flagCode = flag;
+      flagImg.width = 20;
+      flagImg.height = 15;
+      flagImg.alt = "";
+      flagImg.src = flagDataCache.get(flag) || flagSrc(flag);
+      nameEl.appendChild(flagImg);
+      nameEl.appendChild(document.createTextNode("\u00A0" + name));
+    }
     row.appendChild(nameEl);
 
     if (!tbd) {
@@ -385,6 +454,11 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
+
+  // Kick off flag preloading in the background so data URLs are ready by the
+  // time the user clicks "Download". renderBracket() runs immediately and uses
+  // the CDN URLs directly; subsequent renders after picks will use data URLs.
+  preloadAllFlags();
 
   loadState();
   renderBracket();
