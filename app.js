@@ -1,43 +1,4 @@
 (function () {
-  // ── Flag image cache ──────────────────────────────────────────────────────
-
-  // Stores ISO code → base64 data URL once preloaded.
-  // Using data URLs in the SVG foreignObject export avoids cross-origin restrictions.
-  const flagDataCache = new Map();
-
-  function flagSrc(code) {
-    return `https://flagcdn.com/20x15/${code}.png`;
-  }
-
-  // Fetch the flag via the Fetch API and convert to a data URL via FileReader.
-  // This avoids the crossOrigin/canvas-taint approach that can cause Chrome to
-  // stall with neither onload nor onerror firing when the image is already cached
-  // without CORS headers.
-  async function loadFlagDataUrl(code) {
-    try {
-      const res = await fetch(flagSrc(code));
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      flagDataCache.set(code, dataUrl);
-    } catch (_) {
-      // Network or CORS error — flag will stay as a CDN URL in the export
-    }
-  }
-
-  let flagsReadyPromise = null;
-  function preloadAllFlags() {
-    if (flagsReadyPromise) return flagsReadyPromise;
-    const codes = new Set(KNOCKOUT.r32.flatMap(m => [m.home.flag, m.away.flag]));
-    flagsReadyPromise = Promise.all([...codes].map(loadFlagDataUrl));
-    return flagsReadyPromise;
-  }
-
   // ── State ──────────────────────────────────────────────────────────────────
 
   // picks[round][idx] = teamName | null
@@ -172,8 +133,6 @@
     return bar;
   }
 
-  // Dependency-free PNG export: render the bracket into an <svg><foreignObject>,
-  // rasterize it via an <img>, then draw to a canvas and download. No libraries.
   async function downloadBracketImage(btn) {
     const root = document.getElementById("capture-root");
     if (!root) return;
@@ -188,88 +147,31 @@
       alert(msg);
     };
 
-    // Ensure flag images are preloaded as data URLs so they survive the
-    // SVG foreignObject renderer (which does not fetch external resources).
-    // The 5 s cap prevents the export from hanging if any fetch stalls.
-    await Promise.race([preloadAllFlags(), new Promise(r => setTimeout(r, 5000))]);
+    try {
+      // Temporarily expand the scrollable bracket so html2canvas captures its
+      // full width, not just the visible portion.
+      const scrollEl = root.querySelector(".bracket-scroll");
+      const prevOverflow = scrollEl ? scrollEl.style.overflow : "";
+      if (scrollEl) scrollEl.style.overflow = "visible";
 
-    // Fixed export geometry → every user downloads an identically sized image,
-    // independent of viewport (which otherwise drives each flex cell's width).
-    const PAD = 16;   // matches #capture-root padding
-    const COLS = 5;   // R32 → Final columns
-    const CELL = 190; // fixed width per bracket column
-    const width = COLS * CELL + PAD * 2;
+      const fullW = root.scrollWidth;
+      const fullH = root.scrollHeight;
 
-    const clone = root.cloneNode(true);
+      // html2canvas renders the live DOM directly — no SVG foreignObject, no
+      // canvas taint. useCORS lets it fetch the flag images cross-origin.
+      const canvas = await html2canvas(root, {
+        scale: 2,
+        backgroundColor: "#0d1a0e",
+        useCORS: true,
+        logging: false,
+        width: fullW,
+        height: fullH,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: Math.max(fullW, 1024),
+      });
 
-    // Bake computed styles first — copyComputedStyle now filters out any value
-    // containing an external URL, so no CDN ref can sneak in via e.g. `content`.
-    inlineComputedStyles(root, clone);
-    applyExportLayout(clone, width, CELL);
-
-    // Chrome taints the canvas for ANY <img> element inside SVG <foreignObject>,
-    // regardless of the src value. Replace every flag <img> with a <span> whose
-    // flag is rendered via CSS background-image (data URL). CSS backgrounds don't
-    // trigger Chrome's cross-origin check the way <img> elements do.
-    const blankPng = (() => {
-      const cv = document.createElement("canvas");
-      cv.width = 20; cv.height = 15;
-      return cv.toDataURL("image/png");
-    })();
-    clone.querySelectorAll("img.flag[data-flag-code]").forEach(img => {
-      const dataUrl = flagDataCache.get(img.dataset.flagCode) || blankPng;
-      const span = document.createElement("span");
-      span.style.cssText = img.style.cssText;
-      span.style.display = "inline-block";
-      span.style.width = "20px";
-      span.style.minWidth = "20px";
-      span.style.height = "15px";
-      span.style.verticalAlign = "middle";
-      span.style.borderRadius = "1px";
-      span.style.backgroundImage = `url("${dataUrl}")`;
-      span.style.backgroundSize = "cover";
-      span.style.backgroundRepeat = "no-repeat";
-      span.style.content = "";
-      img.parentNode.replaceChild(span, img);
-    });
-    clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-
-    // Measure the laid-out height off-screen so the canvas is sized exactly.
-    clone.style.position = "absolute";
-    clone.style.left = "-99999px";
-    clone.style.top = "0";
-    document.body.appendChild(clone);
-    const height = clone.scrollHeight;
-    document.body.removeChild(clone);
-    clone.style.position = "static";
-    clone.style.left = "";
-    clone.style.top = "";
-
-    // Connector lines are CSS pseudo-elements (can't be inlined), so inject them.
-    const styleEl = document.createElement("style");
-    styleEl.textContent = CONNECTOR_CSS;
-    clone.insertBefore(styleEl, clone.firstChild);
-
-    const xhtml = new XMLSerializer().serializeToString(clone);
-    const svg =
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
-        `<foreignObject x="0" y="0" width="100%" height="100%">${xhtml}</foreignObject>` +
-      `</svg>`;
-
-    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
-    const img = new Image();
-
-    img.onload = () => {
-      const scale = 2;
-      const canvas = document.createElement("canvas");
-      canvas.width  = width * scale;
-      canvas.height = height * scale;
-      const ctx = canvas.getContext("2d");
-      ctx.scale(scale, scale);
-      ctx.fillStyle = getComputedStyle(document.body).backgroundColor || "#0d1a0e";
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
+      if (scrollEl) scrollEl.style.overflow = prevOverflow;
 
       canvas.toBlob((blob) => {
         if (!blob) return fail("Sorry, something went wrong creating the image.");
@@ -281,93 +183,10 @@
         btn.disabled = false;
         btn.textContent = original;
       }, "image/png");
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
+    } catch (e) {
       fail("Sorry, something went wrong creating the image.");
-    };
-
-    img.src = url;
-  }
-
-  // Copy resolved computed styles from each source node onto its clone, so the
-  // detached clone renders identically without needing the external stylesheet.
-  function inlineComputedStyles(src, dst) {
-    copyComputedStyle(src, dst);
-    const srcNodes = src.querySelectorAll("*");
-    const dstNodes = dst.querySelectorAll("*");
-    for (let i = 0; i < srcNodes.length; i++) copyComputedStyle(srcNodes[i], dstNodes[i]);
-  }
-
-  // Sizing props are intentionally skipped: baking frozen px sizes (measured on
-  // the live, possibly-narrow/high-DPI viewport) makes boxes mismatch the fixed
-  // export columns and leaves rounding gaps. Layout still reproduces because all
-  // the display/flex/padding properties are copied — boxes just size naturally.
-  const SKIP_PROPS = new Set([
-    "width", "height", "min-width", "min-height", "max-width", "max-height",
-    "inline-size", "block-size", "min-inline-size", "min-block-size",
-    "max-inline-size", "max-block-size",
-  ]);
-
-  function copyComputedStyle(src, dst) {
-    const cs = getComputedStyle(src);
-    let text = "";
-    for (let i = 0; i < cs.length; i++) {
-      const p = cs[i];
-      if (SKIP_PROPS.has(p)) continue;
-      const val = cs.getPropertyValue(p);
-      // Skip any value referencing an external URL (e.g. content: url("https://...") on
-      // replaced elements like <img>) — these would taint the canvas in the SVG export.
-      if (/url\s*\(\s*["']?https?:/.test(val)) continue;
-      text += p + ":" + val + ";";
     }
-    dst.style.cssText = text;
   }
-
-  // Pin the export to a fixed grid: each column a fixed width, inner boxes fluid
-  // within it. Overrides the per-node widths inlined above so the result is the
-  // same on any screen. Heights stay as inlined (text never wraps → unaffected).
-  function applyExportLayout(clone, width, cell) {
-    clone.style.width = width + "px";
-
-    const fill = (sel) => clone.querySelectorAll(sel).forEach(e => {
-      e.style.width = "auto"; e.style.minWidth = "0"; e.style.maxWidth = "none";
-    });
-
-    clone.querySelectorAll(".bracket-scroll").forEach(e => {
-      e.style.overflow = "visible"; e.style.width = "auto";
-    });
-    fill(".bracket");
-    fill(".round-matches");
-    fill(".match-pair");
-    fill(".round-label");
-    clone.querySelectorAll(".bracket-col").forEach(e => {
-      e.style.flex = "0 0 " + cell + "px";
-      e.style.width = cell + "px";
-      e.style.minWidth = cell + "px";
-      e.style.maxWidth = cell + "px";
-    });
-    clone.querySelectorAll(".bracket .match-card").forEach(e => {
-      e.style.width = "auto"; e.style.maxWidth = "none";
-    });
-    // Third-place card isn't inside a column, so size it to match a bracket cell
-    // (column width minus the card's 8px left/right margins).
-    clone.querySelectorAll(".third-place-section .match-card").forEach(e => {
-      e.style.width = (cell - 16) + "px"; e.style.maxWidth = (cell - 16) + "px";
-    });
-    clone.querySelectorAll(".capture-title").forEach(e => {
-      e.style.height = "auto"; e.style.whiteSpace = "nowrap";
-    });
-  }
-
-  // Bracket connector lines, as pseudo-elements (colour = --border literal).
-  const CONNECTOR_CSS =
-    ".bracket-col:not(.final-col) .match-pair{position:relative;}" +
-    ".bracket-col:not(.final-col) .match-pair::after{content:'';position:absolute;" +
-      "right:0;top:25%;bottom:25%;width:2px;background:#1e3d22;}" +
-    ".bracket-col:not(.final-col) .match-pair::before{content:'';position:absolute;" +
-      "right:-16px;top:50%;width:16px;height:2px;background:#1e3d22;transform:translateY(-1px);}";
 
   function buildMatchCard(round, idx) {
     const { home, away } = matchTeams(round, idx);
@@ -397,13 +216,13 @@
     } else {
       const flagImg = document.createElement("img");
       flagImg.className = "flag";
-      flagImg.dataset.flagCode = flag;
       flagImg.width = 20;
       flagImg.height = 15;
       flagImg.alt = "";
-      flagImg.src = flagDataCache.get(flag) || flagSrc(flag);
+      flagImg.crossOrigin = "anonymous";
+      flagImg.src = `https://flagcdn.com/20x15/${flag}.png`;
       nameEl.appendChild(flagImg);
-      nameEl.appendChild(document.createTextNode("\u00A0" + name));
+      nameEl.appendChild(document.createTextNode(" " + name));
     }
     row.appendChild(nameEl);
 
@@ -472,11 +291,6 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
-
-  // Kick off flag preloading in the background so data URLs are ready by the
-  // time the user clicks "Download". renderBracket() runs immediately and uses
-  // the CDN URLs directly; subsequent renders after picks will use data URLs.
-  preloadAllFlags();
 
   loadState();
   renderBracket();
