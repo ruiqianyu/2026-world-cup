@@ -202,10 +202,15 @@
 
     const clone = root.cloneNode(true);
 
-    // Every flag img must have a data URL src — any external URL left in the SVG
-    // foreignObject will taint the canvas and make toBlob() throw a SecurityError.
-    // Fall back to a blank transparent PNG so the layout is preserved even when
-    // fetch failed (e.g. file:// pages where fetch to https is blocked).
+    // Bake computed styles first — copyComputedStyle now filters out any value
+    // containing an external URL, so no CDN ref can sneak in via e.g. `content`.
+    inlineComputedStyles(root, clone);
+    applyExportLayout(clone, width, CELL);
+
+    // Substitute flag srcs AFTER style baking so this assignment wins over any
+    // property that inlineComputedStyles might have written. Every flag must end
+    // up with a same-origin data URL — any external URL inside the SVG foreignObject
+    // taints the canvas and makes toBlob() throw a SecurityError.
     const blankPng = (() => {
       const cv = document.createElement("canvas");
       cv.width = 20; cv.height = 15;
@@ -213,11 +218,8 @@
     })();
     clone.querySelectorAll("img.flag[data-flag-code]").forEach(img => {
       img.src = flagDataCache.get(img.dataset.flagCode) || blankPng;
+      img.style.content = ""; // clear any baked content value that held the CDN URL
     });
-    // Bake computed styles onto every node so layout survives inside the SVG,
-    // regardless of whether the stylesheet is readable (e.g. file:// pages).
-    inlineComputedStyles(root, clone);
-    applyExportLayout(clone, width, CELL);
     clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
 
     // Measure the laid-out height off-screen so the canvas is sized exactly.
@@ -302,7 +304,11 @@
     for (let i = 0; i < cs.length; i++) {
       const p = cs[i];
       if (SKIP_PROPS.has(p)) continue;
-      text += p + ":" + cs.getPropertyValue(p) + ";";
+      const val = cs.getPropertyValue(p);
+      // Skip any value referencing an external URL (e.g. content: url("https://...") on
+      // replaced elements like <img>) — these would taint the canvas in the SVG export.
+      if (/url\s*\(\s*["']?https?:/.test(val)) continue;
+      text += p + ":" + val + ";";
     }
     dst.style.cssText = text;
   }
